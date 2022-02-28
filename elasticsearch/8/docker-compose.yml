@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  elasticsearch:
+    image: elasticsearch:8.0.0
+    hostname: elasticsearch
+    container_name: elasticsearch_8
+    ports:
+      - '9208:9200'
+      - '9308:9300'
+    environment:
+      discovery.type: single-node
+    networks:
+      - elasticsearch_8_network
+
+networks:
+  elasticsearch_8_network:
+    driver: bridge
+    name: elasticsearch_8_network

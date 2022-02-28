@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  mongo:
+    image: mongo:5.0.6
+    hostname: mongo
+    container_name: mongo_5
+    ports:
+      - '27005:27017'
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - './data/db:/data/db'
+    networks:
+      - mongo_5_network
+
+networks:
+  mongo_5_network:
+    driver: bridge
+    name: mongo_5_network

@@ -1,0 +1,22 @@
+version: '3'
+
+services:
+  postgres:
+    build: .
+    image: debezium/postgres:14
+    hostname: debezium_postgres_14
+    container_name: debezium_postgres_14
+    ports:
+      - '5414:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data:/usr/share/postgresql/data
+    networks:
+      - debezium_postgres_14_network
+
+networks:
+  debezium_postgres_14_network:
+    driver: bridge
+    name: debezium_postgres_14_network

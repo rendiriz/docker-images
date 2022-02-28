@@ -1,0 +1,14 @@
+### Environment
+.env
+
+### Confluent Hub
+confluentinc/confluent-hub-client/*
+!confluentinc/confluent-hub-client/README.md
+
+### Confluent Connector
+confluentinc/confluent-hub-components/*
+!confluentinc/confluent-hub-components/README.md
+
+### Database
+debezium/*/*/data
+database/*/*/data
