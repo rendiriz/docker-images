@@ -27,3 +27,15 @@ Avro Converter connector:
 ```
 confluent-hub install --component-dir confluent-hub-components --no-prompt confluentinc/kafka-connect-avro-converter:7.0.1
 ```
+
+JDBC connector:
+
+```
+confluent-hub install --component-dir confluent-hub-components --no-prompt confluentinc/kafka-connect-jdbc:10.3.3
+```
+
+Connect Transforms connector:
+
+```
+confluent-hub install --component-dir confluent-hub-components --no-prompt confluentinc/connect-transforms:latest
+```

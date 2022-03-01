@@ -1,4 +1,4 @@
-# Database Test
+# Data Stream
 
 ## Creates a Debezium source connector
 
@@ -256,26 +256,30 @@ CREATE TABLE tbl_test_players AS
 DROP TABLE tbl_test_players;
 ```
 
-### Join the streams together
+## Join the streams together
 
 Total player by position id
 
 ```
 CREATE TABLE tbl_test_total_player_by_position_id AS
   SELECT
-		players.position_id,
-		COUNT(players.position_id) AS total
-	FROM strm_test_players players
-	GROUP BY players.position_id
-	EMIT CHANGES;
+    players.position_id,
+    COUNT(players.position_id) AS total
+  FROM tbl_test_players players
+  GROUP BY players.position_id
+  EMIT CHANGES;
+```
+
+```
+DROP TABLE tbl_test_total_player_by_position_id;
 ```
 
 Total position by player
 
 ```
 CREATE TABLE tbl_test_total_position_by_player WITH (
-	KAFKA_TOPIC='test.total_position_by_player',
-	VALUE_FORMAT='json'
+  KAFKA_TOPIC='test.total_position_by_player',
+  VALUE_FORMAT='json'
 ) AS
   SELECT
     positions.id AS id,
@@ -284,4 +288,8 @@ CREATE TABLE tbl_test_total_position_by_player WITH (
   FROM tbl_test_positions positions
   LEFT JOIN tbl_test_total_player_by_position_id AS players ON players.position_id = positions.id
   EMIT CHANGES;
+```
+
+```
+DROP TABLE tbl_test_total_position_by_player;
 ```
