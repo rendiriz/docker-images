@@ -1,0 +1,35 @@
+version: '3'
+services:
+  sonarqube:
+    image: sonarqube:9-community
+    hostname: sonarqube_9
+    container_name: sonarqube_9
+    ports:
+      - '9000:9000'
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      SONAR_JDBC_USERNAME: ${POSTGRES_USER}
+      SONAR_JDBC_PASSWORD: ${POSTGRES_PASSWORD}
+    command: '-Dsonar.search.javaAdditionalOpts=-Dnode.store.allow_mmap=false'
+    volumes:
+      - ./data:/opt/sonarqube/data
+      - ./extensions:/opt/sonarqube/extensions
+      - ./logs:/opt/sonarqube/logs
+    networks:
+      - sonarqube_9_network
+      - debezium_postgres_14_network
+
+volumes:
+  data:
+    name: sonarqube_9_data
+  extensions:
+    name: sonarqube_9_extensions
+  logs:
+    name: sonarqube_9_logs
+
+networks:
+  sonarqube_9_network:
+    driver: bridge
+    name: sonarqube_9_network
+  debezium_postgres_14_network:
+    external: true

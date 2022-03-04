@@ -9,6 +9,17 @@ confluentinc/confluent-hub-client/*
 confluentinc/confluent-hub-components/*
 !confluentinc/confluent-hub-components/README.md
 
-### Database
+### Confluent Folder
+confluentinc/*/*/data
+confluentinc/*/*/log
+
+### Debezium Folder
 debezium/*/*/data
+
+### Database Folder
 database/*/*/data
+
+### Sonarqube Folder
+sonarqube/*/data
+sonarqube/*/extensions
+sonarqube/*/logs
