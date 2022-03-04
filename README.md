@@ -17,7 +17,7 @@
 
 - debezium/postgres:14
 
-## Elastic Search
+## Elasticsearch
 
 - elasticsearch:8.0.0
 
