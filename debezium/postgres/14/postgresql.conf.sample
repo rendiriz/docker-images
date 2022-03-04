@@ -1,3 +1,6 @@
+# PORT
+port = 5414
+
 # LOGGING
 # log_min_error_statement = fatal
 # log_min_messages = DEBUG1
