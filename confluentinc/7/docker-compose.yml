@@ -12,6 +12,9 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - confluentinc_7_network
+    volumes:
+      - ./zookeeper/data:/var/lib/zookeeper/data
+      - ./zookeeper/log:/var/lib/zookeeper/log
 
   broker:
     image: confluentinc/cp-server:7.0.0
@@ -42,6 +45,8 @@ services:
       CONFLUENT_SUPPORT_CUSTOMER_ID: 'anonymous'
     networks:
       - confluentinc_7_network
+    volumes:
+      - ./kafka/data:/var/lib/kafka/data
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.0.0
