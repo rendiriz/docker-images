@@ -20,3 +20,7 @@
 ## Elastic Search
 
 - elasticsearch:8.0.0
+
+## SonarQube
+
+- sonarqube:9-community
