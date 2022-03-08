@@ -84,7 +84,7 @@ create_certificates()
   # Generate keys and certificates used for SSL
   echo -e "Generate keys and certificates used for SSL (see ${DIR}/security)"
   # Install findutils to be able to use 'xargs' in the certs-create.sh script
-  docker run -v ${DIR}/../security/:/etc/kafka/secrets/ -u0 $REPOSITORY/cp-server:${CONFLUENT_DOCKER_TAG} bash -c "yum -y install findutils; cd /etc/kafka/secrets && ./certs-create.sh && chown -R $(id -u $USER):$(id -g $USER) /etc/kafka/secrets"
+  docker run -v ${DIR}/../security/:/etc/kafka/secrets/ -u0 $REPOSITORY/cp-server:${CONFLUENT_DOCKER_TAG} bash -c "yum -y install findutils; cd /etc/kafka/secrets && SSL_PASSWORD=$SSL_PASSWORD ./certs-create.sh && chown -R $(id -u $USER):$(id -g $USER) /etc/kafka/secrets"
 
   # Generating public and private keys for token signing
   echo "Generating public and private keys for token signing"
@@ -94,4 +94,98 @@ create_certificates()
   echo -e "Setting insecure permissions on some files in ${DIR}/../security for ${PROJECT_NAME} purposes\n"
   chmod 644 ${DIR}/../security/keypair/keypair.pem
   chmod 644 ${DIR}/../security/*.key
+}
+
+build_connect_image()
+{
+  echo
+  echo "Building custom Docker image with Connect version ${CONFLUENT_DOCKER_TAG} and connector version ${CONNECTOR_VERSION}"
+
+  local DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+
+  DOCKERFILE="${DIR}/../../Dockerfile"
+  CONTEXT="${DIR}/../../."
+  echo "docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY --build-arg SSL_PASSWORD=$SSL_PASSWORD -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT"
+  docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY --build-arg SSL_PASSWORD=$SSL_PASSWORD -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT || {
+    echo "ERROR: Docker image build failed. Please troubleshoot and try again. For troubleshooting instructions see https://docs.confluent.io/platform/current/tutorials/cp-demo/docs/troubleshooting.html"
+    exit 1
+  }
+
+  # Copy the updated kafka.connect.truststore.jks back to the host
+  docker create --name ${PROJECT_NAME}-tmp-connect localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION}
+  docker cp ${PROJECT_NAME}-tmp-connect:/tmp/kafka.connect.truststore.jks ${DIR}/../security/kafka.connect.truststore.jks
+  docker rm ${PROJECT_NAME}-tmp-connect
+}
+
+poststart_checks()
+{
+  # Verify no containers have Exited
+  if [[ $(docker-compose ps | grep Exit) ]]; then
+    echo -e "\nWARNING: at least one Docker container unexpectedly exited. Please troubleshoot, see https://docs.confluent.io/platform/current/tutorials/cp-demo/docs/troubleshooting.html"
+  fi
+
+  # Validate connectors are running
+  connectorList=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://connect:8083/connectors/ | jq -r @sh | xargs echo)
+  for connector in $connectorList; do
+    check_connector_status_running $connector || echo -e "\nWARNING: Connector $connector is not in RUNNING state. Is it still starting up?"
+  done
+
+  # # Check number of Schema Registry subjects
+  # # The subject created by the Kafka Streams app may be created after start script ends, so ignore that subject here (to not add time to start script)
+  # numSubjects=6
+  # foundSubjects=$(docker-compose exec schemaregistry curl -X GET --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://schemaregistry:8085/subjects | jq length)
+  # if [[ $foundSubjects -lt $numSubjects ]]; then
+  #   echo -e "\nWARNING: Expected to find at least $numSubjects subjects in Schema Registry but found $foundSubjects subjects. Please troubleshoot, see https://docs.confluent.io/platform/current/tutorials/cp-demo/docs/troubleshooting.html"
+  # fi
+
+  echo
+}
+
+#-------------------------------------------------------------------------------
+
+host_check_mds_up()
+{
+  FOUND=$(docker-compose logs kafka1 | grep "Started NetworkTrafficServerConnector")
+  if [ -z "$FOUND" ]; then
+    return 1
+  fi
+  return 0
+}
+
+host_check_control_center_up()
+{
+  FOUND=$(docker-compose logs control-center | grep "Started NetworkTrafficServerConnector")
+  if [ -z "$FOUND" ]; then
+    return 1
+  fi
+  return 0
+}
+
+host_check_connect_up()
+{
+  containerName=$1
+  FOUND=$(docker-compose logs $containerName | grep "Herder started")
+  if [ -z "$FOUND" ]; then
+    return 1
+  fi
+  return 0
+}
+
+host_check_ksqlDBserver_up()
+{
+  KSQLDB_CLUSTER_ID=$(curl -s -u ksqlDBUser:ksqlDBUser http://localhost:8088/info | jq -r ".KsqlServerInfo.ksqlServiceId")
+  if [ "$KSQLDB_CLUSTER_ID" == "ksql-cluster" ]; then
+    return 0
+  fi
+  return 1
+}
+
+check_connector_status_running() {
+  connectorName=$1
+
+  STATE=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-ca-1.crt -u superUser:superUser https://connect:8083/connectors/$connectorName/status | jq -r .connector.state)
+  if [[ "$STATE" != "RUNNING" ]]; then
+    return 1
+  fi
+  return 0
 }
