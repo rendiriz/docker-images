@@ -20,6 +20,7 @@ ARG SSL_PASSWORD
 FROM $REPOSITORY/cp-enterprise-replicator:$CP_VERSION
 
 ENV CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+ENV SSL_PASSWORD $SSL_PASSWORD
 
 # Install SSE connector
 RUN confluent-hub install --no-prompt cjmatta/kafka-connect-sse:1.0
@@ -45,8 +46,9 @@ RUN confluent-hub install --no-prompt confluentinc/kafka-connect-jdbc:10.3.3
 # Install Connect Transform connector
 RUN confluent-hub install --no-prompt confluentinc/connect-transforms:latest
 
+# TODO: Change Password
 # Add JDK default cacerts to kafka.connect.truststore.jks to allow outgoing HTTPS
 COPY scripts/security/kafka.connect.truststore.jks /tmp/kafka.connect.truststore.jks
 USER root
-RUN keytool -importkeystore -srckeystore /usr/lib/jvm/zulu11-ca/lib/security/cacerts -srcstorepass changeit -destkeystore /tmp/kafka.connect.truststore.jks -deststorepass $SSL_PASSWORD -keypass $SSL_PASSWORD
+RUN keytool -importkeystore -srckeystore /usr/lib/jvm/zulu11-ca/lib/security/cacerts -srcstorepass changeit -destkeystore /tmp/kafka.connect.truststore.jks -deststorepass confluent -keypass confluent
 USER appuser

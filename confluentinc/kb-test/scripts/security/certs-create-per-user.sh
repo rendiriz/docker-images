@@ -53,7 +53,7 @@ keytool -noprompt -keystore kafka.$i.keystore.jks -alias snakeoil-caroot -import
 #keytool -list -v -keystore kafka.$i.keystore.jks -storepass confluent
 
 # Sign and import the host certificate into the keystore
-keytool -noprompt -keystore kafka.$i.keystore.jks -alias $i -import -file $i-ca1-signed.crt -storepass ${SSL_PASSWORD} -keypass ${SSL_PASSWORD} -ext "SAN=dns:$i,dns:localhost"
+keytool -noprompt -keystore kafka.$i.keystore.jks -alias $i -import -file $i-wj1-signed.crt -storepass ${SSL_PASSWORD} -keypass ${SSL_PASSWORD} -ext "SAN=dns:$i,dns:localhost"
 #keytool -list -v -keystore kafka.$i.keystore.jks -storepass confluent
 
 # Create truststore and import the CA cert

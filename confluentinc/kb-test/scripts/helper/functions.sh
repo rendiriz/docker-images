@@ -96,6 +96,49 @@ create_certificates()
   chmod 644 ${DIR}/../security/*.key
 }
 
+get_kafka_cluster_id_from_container()
+{
+  KAFKA_CLUSTER_ID=$(curl -s https://kafka1:8091/v1/metadata/id --cert /etc/kafka/secrets/mds.certificate.pem --key /etc/kafka/secrets/mds.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt | jq -r ".id")
+
+  if [ -z "$KAFKA_CLUSTER_ID" ]; then
+    echo "Failed to retrieve Kafka cluster id"
+    exit 1
+  fi
+  echo $KAFKA_CLUSTER_ID
+  return 0
+}
+
+mds_login()
+{
+  MDS_URL=$1
+  SUPER_USER=$2
+  SUPER_USER_PASSWORD=$3
+
+  # Log into MDS
+  if [[ $(type expect 2>&1) =~ "not found" ]]; then
+    echo "'expect' is not found. Install 'expect' and try again"
+    exit 1
+  fi
+  echo -e "\n# Login to MDS using Confluent CLI"
+  OUTPUT=$(
+  expect <<END
+    log_user 1
+    spawn confluent-v1 login --ca-cert-path /etc/kafka/secrets/snakeoil-wj-1.crt --url $MDS_URL
+    expect "Username: "
+    send "${SUPER_USER}\r";
+    expect "Password: "
+    send "${SUPER_USER_PASSWORD}\r";
+    expect EOF
+    catch wait result
+    exit [lindex \$result 3]
+END
+  )
+  if [ $? -ne 0 ]; then
+    echo "Failed to log into MDS. Please check all parameters and run again."
+    exit
+  fi
+}
+
 build_connect_image()
 {
   echo
@@ -115,6 +158,45 @@ build_connect_image()
   docker create --name ${PROJECT_NAME}-tmp-connect localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION}
   docker cp ${PROJECT_NAME}-tmp-connect:/tmp/kafka.connect.truststore.jks ${DIR}/../security/kafka.connect.truststore.jks
   docker rm ${PROJECT_NAME}-tmp-connect
+}
+
+create_topic() {
+
+  local DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+
+  broker_host_port=$1
+  cluster_id=$2
+  topic_name=$3
+  confluent_value_schema_validation=$4
+  auth=$5
+
+  # note --tlsv1.2 below sets the _minimum_ allowed TLS version - expect TLS 1.3 to be negotiated here
+  {
+  IFS= read -rd '' out
+  IFS= read -rd '' http_code
+  IFS= read -rd '' status
+  } < <({ out=$(curl -sS -X POST \
+    -o /dev/stderr \
+    -w "%{http_code}" \
+    -u ${auth} \
+    --tlsv1.2 \
+    --cacert /etc/kafka/secrets/snakeoil-wj-1.crt \
+    --header 'Content-Type: application/json' \
+    --header 'Accept: application/json' \
+    --data-binary @<(jq -n --arg topic_name "${topic_name}" --arg confluent_value_schema_validation "${confluent_value_schema_validation}" -f ${DIR}/topic.jq) \
+    "https://${broker_host_port}/kafka/v3/clusters/${cluster_id}/topics"); } 2>&1; printf '\0%s' "$out" "$?") || true
+
+  #echo "response code: " $http_code
+  #echo $out| jq || true
+
+  if [[ $status -ne 0 || $http_code -gt 299 || -z $out || $out =~ "error_code" ]]; then
+    echo "ERROR: create topic failed $out"
+    return 1
+  else
+    echo "Created topic $topic_name"
+  fi
+
+  return 0
 }
 
 poststart_checks()
@@ -183,7 +265,7 @@ host_check_ksqlDBserver_up()
 check_connector_status_running() {
   connectorName=$1
 
-  STATE=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-ca-1.crt -u superUser:superUser https://connect:8083/connectors/$connectorName/status | jq -r .connector.state)
+  STATE=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://connect:8083/connectors/$connectorName/status | jq -r .connector.state)
   if [[ "$STATE" != "RUNNING" ]]; then
     return 1
   fi
