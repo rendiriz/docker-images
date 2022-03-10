@@ -25,6 +25,29 @@ retry()
     printf "${PRETTY_PASS}%s\n\n"
 }
 
+create_ldap_user() {
+  local DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+
+  (cd ${DIR}/../security && 
+    (rm -f ldap_users/999_group_add.ldif && touch ldap_users/999_group_add.ldif) &&
+    # Create a user
+    users=(MDS SUPER CONNECTADMIN CONNECTOR CONNECTORSUBMITTER SCHEMAREGISTERY KSQLDBADMIN KSQLDBUSER CONTROLCENTERADMIN APP APPBAD CLIENTLISTEN RESTADMIN)
+    for i in "${!users[@]}"
+    do
+      index=$( expr $i + 100 )
+      user=${users[$i]}
+
+      username=${user}_USER
+      password=${user}_PASSWORD
+
+      ORGANIZATION=${ORGANIZATION} USERNAME=${!username} PASSWORD=${!password} ./create_ldap_user.sh "$index"
+
+      
+      USERNAME=${!username} ./create_ldap_user_group.sh
+    done
+  )
+}
+
 verify_installed()
 {
   local cmd="$1"
@@ -148,8 +171,8 @@ build_connect_image()
 
   DOCKERFILE="${DIR}/../../Dockerfile"
   CONTEXT="${DIR}/../../."
-  echo "docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY --build-arg SSL_PASSWORD=$SSL_PASSWORD -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT"
-  docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY --build-arg SSL_PASSWORD=$SSL_PASSWORD -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT || {
+  echo "docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT"
+  docker build --build-arg CP_VERSION=${CONFLUENT_DOCKER_TAG} --build-arg REPOSITORY=$REPOSITORY --build-arg KEY=$SSL_PASSWORD -t localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION} -f $DOCKERFILE $CONTEXT || {
     echo "ERROR: Docker image build failed. Please troubleshoot and try again. For troubleshooting instructions see https://docs.confluent.io/platform/current/tutorials/cp-demo/docs/troubleshooting.html"
     exit 1
   }
@@ -207,7 +230,7 @@ poststart_checks()
   fi
 
   # Validate connectors are running
-  connectorList=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://connect:8083/connectors/ | jq -r @sh | xargs echo)
+  connectorList=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u ${SUPER_USER}:${SUPER_PASSWORD} https://connect:8083/connectors/ | jq -r @sh | xargs echo)
   for connector in $connectorList; do
     check_connector_status_running $connector || echo -e "\nWARNING: Connector $connector is not in RUNNING state. Is it still starting up?"
   done
@@ -215,7 +238,7 @@ poststart_checks()
   # # Check number of Schema Registry subjects
   # # The subject created by the Kafka Streams app may be created after start script ends, so ignore that subject here (to not add time to start script)
   # numSubjects=6
-  # foundSubjects=$(docker-compose exec schemaregistry curl -X GET --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://schemaregistry:8085/subjects | jq length)
+  # foundSubjects=$(docker-compose exec schemaregistry curl -X GET --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u ${SUPER_USER}:${SUPER_PASSWORD} https://schemaregistry:8085/subjects | jq length)
   # if [[ $foundSubjects -lt $numSubjects ]]; then
   #   echo -e "\nWARNING: Expected to find at least $numSubjects subjects in Schema Registry but found $foundSubjects subjects. Please troubleshoot, see https://docs.confluent.io/platform/current/tutorials/cp-demo/docs/troubleshooting.html"
   # fi
@@ -255,7 +278,7 @@ host_check_connect_up()
 
 host_check_ksqlDBserver_up()
 {
-  KSQLDB_CLUSTER_ID=$(curl -s -u ksqlDBUser:ksqlDBUser http://localhost:8088/info | jq -r ".KsqlServerInfo.ksqlServiceId")
+  KSQLDB_CLUSTER_ID=$(curl -s -u ${KSQLDBUSER_USER}:${KSQLDBUSER_PASSWORD} http://localhost:8088/info | jq -r ".KsqlServerInfo.ksqlServiceId")
   if [ "$KSQLDB_CLUSTER_ID" == "ksql-cluster" ]; then
     return 0
   fi
@@ -265,7 +288,7 @@ host_check_ksqlDBserver_up()
 check_connector_status_running() {
   connectorName=$1
 
-  STATE=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u superUser:superUser https://connect:8083/connectors/$connectorName/status | jq -r .connector.state)
+  STATE=$(docker-compose exec connect curl -X GET --cert /etc/kafka/secrets/connect.certificate.pem --key /etc/kafka/secrets/connect.key --tlsv1.2 --cacert /etc/kafka/secrets/snakeoil-wj-1.crt -u ${SUPER_USER}:${SUPER_PASSWORD} https://connect:8083/connectors/$connectorName/status | jq -r .connector.state)
   if [[ "$STATE" != "RUNNING" ]]; then
     return 1
   fi

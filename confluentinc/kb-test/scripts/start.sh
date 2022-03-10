@@ -36,6 +36,7 @@ echo "  C3_KSQLDB_HTTPS=$C3_KSQLDB_HTTPS"
 echo
 
 if [[ "$CLEAN" == "true" ]] ; then
+  create_ldap_user
   create_certificates
 fi
 
@@ -62,7 +63,7 @@ sleep 5
 docker-compose exec tools bash -c "cp /etc/kafka/secrets/snakeoil-wj-1.crt /usr/local/share/ca-certificates && /usr/sbin/update-ca-certificates"
 
 echo "Creating role bindings for principals"
-docker-compose exec tools bash -c "/tmp/helper/create-role-bindings.sh" || exit 1
+docker-compose exec tools bash -c "USERNAME=${SUPER_USER} PASSWORD=${SUPER_PASSWORD} /tmp/helper/create-role-bindings.sh" || exit 1
 
 # Workaround for setting min ISR on topic _confluent-metadata-auth
 docker-compose exec kafka1 kafka-configs \
@@ -84,7 +85,7 @@ docker-compose up -d schemaregistry connect control-center
 
 echo
 echo -e "Create topics in Kafka cluster:"
-docker-compose exec tools bash -c "/tmp/helper/create-topics.sh" || exit 1
+docker-compose exec tools bash -c "USERNAME=${SUPER_USER} PASSWORD=${SUPER_PASSWORD} /tmp/helper/create-topics.sh" || exit 1
 
 # Verify Confluent Control Center has started
 MAX_WAIT=300
@@ -93,7 +94,7 @@ echo "Waiting up to $MAX_WAIT seconds for Confluent Control Center to start"
 retry $MAX_WAIT host_check_control_center_up || exit 1
 
 echo -e "\nConfluent Control Center modifications:"
-${DIR}/helper/control-center-modifications.sh
+USERNAME=${CONTROLCENTERADMIN_USER} PASSWORD=${CONTROLCENTERADMIN_PASSWORD} ${DIR}/helper/control-center-modifications.sh
 echo
 
 # Verify Kafka Connect Worker has started
@@ -137,7 +138,7 @@ cat << EOF
 ----------------------------------------------------------------------------------------------------
 DONE! From your browser:
 
-  Confluent Control Center (login superUser/superUser for full access):
+  Confluent Control Center (login superuser/entersuperuser for full access):
      $C3URL
 
 EOF

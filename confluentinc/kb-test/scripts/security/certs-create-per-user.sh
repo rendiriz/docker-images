@@ -60,9 +60,9 @@ keytool -noprompt -keystore kafka.$i.keystore.jks -alias $i -import -file $i-wj1
 keytool -noprompt -keystore kafka.$i.truststore.jks -alias snakeoil-caroot -import -file ${CA_PATH}/snakeoil-wj-1.crt -storepass ${SSL_PASSWORD} -keypass ${SSL_PASSWORD}
 
 # Save creds
-echo "confluent" > ${i}_sslkey_creds
-echo "confluent" > ${i}_keystore_creds
-echo "confluent" > ${i}_truststore_creds
+echo "${SSL_PASSWORD}" > ${i}_sslkey_creds
+echo "${SSL_PASSWORD}" > ${i}_keystore_creds
+echo "${SSL_PASSWORD}" > ${i}_truststore_creds
 
 # Create pem files and keys used for Schema Registry HTTPS testing
 #   openssl x509 -noout -modulus -in client.certificate.pem | openssl md5

@@ -7,7 +7,7 @@ source ${DIR}/functions.sh
 
 KAFKA_CLUSTER_ID=$(get_kafka_cluster_id_from_container)
 
-auth="superUser:superUser"
+auth="${USERNAME}:${PASSWORD}"
 
 create_topic kafka1:8091 ${KAFKA_CLUSTER_ID} users true ${auth}
 # create_topic kafka1:8091 ${KAFKA_CLUSTER_ID} wikipedia.parsed true ${auth}

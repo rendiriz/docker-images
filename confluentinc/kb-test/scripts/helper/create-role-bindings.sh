@@ -16,22 +16,20 @@ KSQLDB=ksql-cluster
 C3=c3-cluster
 LICENSE_RESOURCE="Topic:_confluent-license"
 
-SUPER_USER=superUser
-SUPER_USER_PASSWORD=superUser
-SUPER_USER_PRINCIPAL="User:$SUPER_USER"
-CONNECT_ADMIN="User:connectAdmin"
-CONNECTOR_SUBMITTER="User:connectorSubmitter"
-CONNECTOR_PRINCIPAL="User:connectorSA"
-SR_PRINCIPAL="User:schemaregistryUser"
-KSQLDB_ADMIN="User:ksqlDBAdmin"
-KSQLDB_USER="User:ksqlDBUser"
+SUPER_USER_PRINCIPAL="User:$USERNAME"
+CONNECT_ADMIN="User:connectadmin"
+CONNECTOR_SUBMITTER="User:connectorsubmitter"
+CONNECTOR_PRINCIPAL="User:connector"
+SR_PRINCIPAL="User:schemaregistry"
+KSQLDB_ADMIN="User:ksqldbadmin"
+KSQLDB_USER="User:ksqldbuser"
 KSQLDB_SERVER="User:controlCenterAndKsqlDBServer"
-C3_ADMIN="User:controlcenterAdmin"
-REST_ADMIN="User:restAdmin"
-CLIENT_PRINCIPAL="User:appSA"
-LISTEN_PRINCIPAL="User:clientListen"
+C3_ADMIN="User:controlcenteradmin"
+REST_ADMIN="User:restadmin"
+CLIENT_PRINCIPAL="User:app"
+LISTEN_PRINCIPAL="User:clientlisten"
 
-mds_login $MDS_URL ${SUPER_USER} ${SUPER_USER_PASSWORD} || exit 1
+mds_login $MDS_URL ${USERNAME} ${PASSWORD} || exit 1
 
 ################################### SUPERUSER ###################################
 echo "Creating role bindings for Super User"

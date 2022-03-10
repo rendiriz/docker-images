@@ -18,6 +18,9 @@ config.env
 **/*.der
 **/*.p12
 **/keypair/
+**/ldap_users/*.ldif
+!**/ldap_users/01_base.ldif
+!**/ldap_users/02_KafkaDevelopers.ldif
 ui/expanded
 *.zip
 *.log
