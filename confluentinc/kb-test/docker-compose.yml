@@ -10,7 +10,7 @@ services:
         LDAP_DOMAIN: "kitabikin.com"
         LDAP_BASE_DN: "dc=kitabikin,dc=com"
     volumes:
-        - ./scripts/security/ldap_users:/container/service/slapd/assets/config/bootstrap/ldif/custom
+        - openldap-users:/container/service/slapd/assets/config/bootstrap/ldif/custom
     command: "--copy-service --loglevel debug"
 
   zookeeper:
@@ -45,7 +45,7 @@ services:
       ZOOKEEPER_AUTH_PROVIDER_SASL: org.apache.zookeeper.server.auth.SASLAuthenticationProvider
       KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/zookeeper_jaas.conf
     volumes:
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-security:/etc/kafka/secrets
 
   tools:
     image: cnfldemos/tools:0.3
@@ -56,8 +56,8 @@ services:
       - kafka1
       - kafka2
     volumes:
-      - ./scripts/helper:/tmp/helper
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
     entrypoint: /bin/bash
     tty: true
     environment:
@@ -71,9 +71,9 @@ services:
       - zookeeper
       - openldap
     volumes:
-      - ./scripts/security/keypair:/tmp/conf
-      - ./scripts/helper:/tmp/helper
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
     command: "bash -c 'if [ ! -f /etc/kafka/secrets/kafka.kafka1.keystore.jks ]; then echo \"ERROR: Did not find SSL certificates in /etc/kafka/secrets/ (did you remember to run ./scripts/start.sh instead of docker-compose up -d?)\" && exit 1 ; else /etc/confluent/docker/run ; fi'"
     ports:
       - 8091:8091
@@ -103,7 +103,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9091,TOKEN://kafka1:10091,SSL://kafka1:11091,CLEAR://kafka1:12091
       
-      KAFKA_SUPER_USERS: User:admin;User:mds;User:superuser;User:ANONYMOUS
+      KAFKA_SUPER_USERS: User:admin;User:${MDS_USER};User:${SUPER_USER};User:ANONYMOUS
       KAFKA_LOG4J_LOGGERS: "kafka.authorizer.logger=INFO"
       KAFKA_LOG4J_ROOT_LOGLEVEL: INFO
 
@@ -244,9 +244,9 @@ services:
       - zookeeper
       - openldap
     volumes:
-      - ./scripts/security/keypair:/tmp/conf
-      - ./scripts/helper:/tmp/helper
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
     command: "bash -c 'if [ ! -f /etc/kafka/secrets/kafka.kafka2.keystore.jks ]; then echo \"ERROR: Did not find SSL certificates in /etc/kafka/secrets/ (did you remember to run ./scripts/start.sh instead of docker-compose up -d?)\" && exit 1 ; else /etc/confluent/docker/run ; fi'"
     ports:
       - 8092:8092
@@ -276,7 +276,7 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9092,TOKEN://kafka2:10092,SSL://kafka2:11092,CLEAR://kafka2:12092
       
-      KAFKA_SUPER_USERS: User:admin;User:mds;User:superuser;User:ANONYMOUS
+      KAFKA_SUPER_USERS: User:admin;User:${MDS_USER};User:${SUPER_USER};User:ANONYMOUS
       KAFKA_LOG4J_LOGGERS: "kafka.authorizer.logger=INFO"
       KAFKA_LOG4J_ROOT_LOGLEVEL: INFO
 
@@ -417,8 +417,8 @@ services:
       - kafka1
       - kafka2
     volumes:
-      - ./scripts/security:/etc/kafka/secrets
-      - ./scripts/security/keypair:/tmp/conf
+      - scripts-security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
     ports:
       - 8085:8085
     environment:
@@ -434,8 +434,8 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_SASL_LOGIN_CALLBACK_HANDLER_CLASS: io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
       SCHEMA_REGISTRY_KAFKASTORE_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="schemaregistry" \
-              password="enterschemaregistry" \
+              username="${SCHEMAREGISTERY_USER}" \
+              password="${SCHEMAREGISTERY_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
       SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.schemaregistry.truststore.jks
       SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
@@ -467,7 +467,7 @@ services:
       # Used by Schema Registry to connect to MDS to authenticate and authorize clients
       SCHEMA_REGISTRY_CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
       SCHEMA_REGISTRY_CONFLUENT_METADATA_HTTP_AUTH_CREDENTIALS_PROVIDER: BASIC
-      SCHEMA_REGISTRY_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: ${SCHEMAREGISTERY_USER}:${SCHEMAREGISTERY_PASSWORD}
+      SCHEMA_REGISTRY_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: '${SCHEMAREGISTERY_USER}:${SCHEMAREGISTERY_PASSWORD}'
 
   connect:
     image: localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION}
@@ -483,8 +483,8 @@ services:
       - kafka2
       - schemaregistry
     volumes:
-      - ./scripts/security:/etc/kafka/secrets
-      - ./scripts/security/keypair:/tmp/conf
+      - scripts-security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
     ports:
       - 8083:8083
     environment:
@@ -557,8 +557,8 @@ services:
       CONNECT_SASL_LOGIN_CALLBACK_HANDLER_CLASS: 'io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler'
       CONNECT_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="connectadmin" \
-              password="enterconnectadmin" \
+              username="${CONNECTADMIN_USER}" \
+              password="${CONNECTADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
       # Allow overriding configs on the connector level
@@ -571,8 +571,8 @@ services:
       CONNECT_PRODUCER_CONFLUENT_MONITORING_INTERCEPTOR_SASL_LOGIN_CALLBACK_HANDLER_CLASS: 'io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler'
       CONNECT_PRODUCER_CONFLUENT_MONITORING_INTERCEPTOR_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="connectadmin" \
-              password="enterconnectadmin" \
+              username="${CONNECTADMIN_USER}" \
+              password="${CONNECTADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
       # Consumer
@@ -582,8 +582,8 @@ services:
       CONNECT_CONSUMER_CONFLUENT_MONITORING_INTERCEPTOR_SASL_LOGIN_CALLBACK_HANDLER_CLASS: 'io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler'
       CONNECT_CONSUMER_CONFLUENT_MONITORING_INTERCEPTOR_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="connectadmin" \
-              password="enterconnectadmin" \
+              username="${CONNECTADMIN_USER}" \
+              password="${CONNECTADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
       # Default admin config
@@ -624,8 +624,8 @@ services:
       CONNECT_CONFIG_PROVIDERS_SECRET_PARAM_KAFKASTORE_SASL_LOGIN_CALLBACK_HANDLER_CLASS: 'io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler'
       CONNECT_CONFIG_PROVIDERS_SECRET_PARAM_KAFKASTORE_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="connectadmin" \
-              password="enterconnectadmin" \
+              username="${CONNECTADMIN_USER}" \
+              password="${CONNECTADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
       # KAFKA_OPTS required for ReplicatorMonitoringExtension
@@ -651,8 +651,8 @@ services:
       - schemaregistry
       - connect
     volumes:
-      - ./scripts/security/keypair:/tmp/conf
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+      - scripts-security:/etc/kafka/secrets
     ports:
       - 9021:9021
       - 9022:9022
@@ -666,8 +666,8 @@ services:
       CONTROL_CENTER_STREAMS_SASL_LOGIN_CALLBACK_HANDLER_CLASS: io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
       CONTROL_CENTER_STREAMS_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="controlcenteradmin" \
-              password="entercontrolcenteradmin" \
+              username="${CONTROLCENTERADMIN_USER}" \
+              password="${CONTROLCENTERADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
       CONTROL_CENTER_STREAMS_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
 
@@ -721,7 +721,7 @@ services:
       
       # Used by Control Center to connect to MDS to verify tokens and authenticate clients
       CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
-      CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: ${CONTROLCENTERADMIN_USER}:${CONTROLCENTERADMIN_PASSWORD}
+      CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: '${CONTROLCENTERADMIN_USER}:${CONTROLCENTERADMIN_PASSWORD}'
 
       # Used by Control Center to connect to the Admin API for Self Balancing Clusters
       CONTROL_CENTER_STREAMS_CPREST_URL: "https://kafka1:8091,https://kafka2:8092"
@@ -739,9 +739,9 @@ services:
       - kafka2
       - connect
     volumes:
-      - ./scripts/security/keypair:/tmp/conf
-      - ./scripts/helper:/tmp/helper
-      - ./scripts/security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
     ports:
       - 8088:8088
       - 8089:8089
@@ -779,7 +779,7 @@ services:
       KSQL_CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
       KSQL_CONFLUENT_METADATA_HTTP_AUTH_CREDENTIALS_PROVIDER: BASIC
       KSQL_CONFLUENT_METADATA_BASIC_AUTH_CREDENTIALS_PROVIDER: USER_INFO
-      KSQL_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: ${KSQLDBADMIN_USER}:${KSQLDBADMIN_PASSWORD}
+      KSQL_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: '${KSQLDBADMIN_USER}:${KSQLDBADMIN_PASSWORD}'
 
       # Authenticate to brokers
       KSQL_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.controlCenterAndKsqlDBServer.truststore.jks
@@ -802,12 +802,12 @@ services:
       KSQL_SASL_LOGIN_CALLBACK_HANDLER_CLASS: io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
       KSQL_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="ksqladmin" \
-              password="enterksqladmin" \
+              username="${KSQLDBADMIN_USER}" \
+              password="${KSQLDBADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
       KSQL_KSQL_SCHEMA_REGISTRY_BASIC_AUTH_CREDENTIALS_SOURCE: USER_INFO
-      KSQL_KSQL_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO: ${KSQLDBADMIN_USER}:${KSQLDBADMIN_PASSWORD}
+      KSQL_KSQL_SCHEMA_REGISTRY_BASIC_AUTH_USER_INFO: '${KSQLDBADMIN_USER}:${KSQLDBADMIN_PASSWORD}'
 
       # Confluent Monitoring Interceptors for Control Center streams monitoring
       KSQL_PRODUCER_INTERCEPTOR_CLASSES: "io.confluent.monitoring.clients.interceptor.MonitoringProducerInterceptor"
@@ -822,8 +822,8 @@ services:
       KSQL_CONFLUENT_MONITORING_INTERCEPTOR_SASL_LOGIN_CALLBACK_HANDLER_CLASS: io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
       KSQL_CONFLUENT_MONITORING_INTERCEPTOR_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="ksqladmin" \
-              password="enterksqladmin" \
+              username="${KSQLDBADMIN_USER}" \
+              password="${KSQLDBADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
 
   ksqldb-cli:
@@ -847,9 +847,9 @@ services:
     hostname: restproxy
     container_name: restproxy
     volumes:
-      - ./scripts/security:/etc/kafka/secrets
-      - ./scripts/app:/etc/kafka/app
-      - ./scripts/security/keypair:/tmp/conf
+      - scripts-security:/etc/kafka/secrets
+      - scripts-app:/etc/kafka/app
+      - scripts-security-keypair:/tmp/conf
     ports:
       - 8086:8086
     environment:
@@ -883,8 +883,8 @@ services:
       KAFKA_REST_CLIENT_SASL_LOGIN_CALLBACK_HANDLER_CLASS: io.confluent.kafka.clients.plugins.auth.token.TokenUserLoginCallbackHandler
       KAFKA_REST_CLIENT_SASL_JAAS_CONFIG: |
               org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required \
-              username="restadmin" \
-              password="enterrestadmin" \
+              username="${RESTADMIN_USER}" \
+              password="${RESTADMIN_PASSWORD}" \
               metadataServerUrls="https://kafka1:8091,https://kafka2:8092";
       KAFKA_REST_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
 
@@ -898,4 +898,36 @@ services:
       KAFKA_REST_CLIENT_CONFLUENT_METADATA_SERVER_URLS_MAX_AGE_MS: 60000
       KAFKA_REST_CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
       KAFKA_REST_CONFLUENT_METADATA_HTTP_AUTH_CREDENTIALS_PROVIDER: BASIC
-      KAFKA_REST_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: ${RESTADMIN_USER}:${RESTADMIN_PASSWORD}
+      KAFKA_REST_CONFLUENT_METADATA_BASIC_AUTH_USER_INFO: '${RESTADMIN_USER}:${RESTADMIN_PASSWORD}'
+
+volumes:
+  openldap-users:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./scripts/security/ldap_users
+  scripts-security:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./scripts/security
+  scripts-helper:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./scripts/helper
+  scripts-security-keypair:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./scripts/security/keypair
+  scripts-app:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ./scripts/app
