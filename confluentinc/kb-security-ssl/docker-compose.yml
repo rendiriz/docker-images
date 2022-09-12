@@ -1,5 +1,23 @@
-version: "3.7"
+version: '3.7'
 services:
+
+  tools:  
+    image: cnfldemos/tools:0.3
+    hostname: tools
+    container_name: tools
+    depends_on:
+      - zookeeper
+      - kafka1
+      - kafka2
+    volumes:
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
+    entrypoint: /bin/bash
+    tty: true
+    networks:
+      - kb-security-ssl_default
+    environment:
+      TZ: Asia/Jakarta
 
   zookeeper:
     image: ${REPOSITORY}/cp-zookeeper:${CONFLUENT_DOCKER_TAG}
@@ -9,27 +27,350 @@ services:
     ports:
       - 2181:2181
       - 2182:2182
+    networks:
+      - kb-security-ssl_default
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
       ZOOKEEPER_SECURE_CLIENT_PORT: 2182
       ZOOKEEPER_SERVER_CNXN_FACTORY: org.apache.zookeeper.server.NettyServerCnxnFactory
+      ZOOKEEPER_AUTH_PROVIDER_X509: org.apache.zookeeper.server.auth.X509AuthenticationProvider
+
+      ZOOKEEPER_SSL_ENABLED_PROTOCOLS: TLSv1.3,TLSv1.2
+      ZOOKEEPER_SSL_QUORUM_ENABLED_PROTOCOLS: TLSv1.3,TLSv1.2
+
       ZOOKEEPER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.zookeeper.keystore.jks
       ZOOKEEPER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
       ZOOKEEPER_SSL_KEYSTORE_TYPE: PKCS12
       ZOOKEEPER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.zookeeper.truststore.jks
       ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
       ZOOKEEPER_SSL_TRUSTSTORE_TYPE: JKS
-      ZOOKEEPER_SSL_ENABLED_PROTOCOLS: TLSv1.3,TLSv1.2
-      ZOOKEEPER_SSL_QUORUM_ENABLED_PROTOCOLS: TLSv1.3,TLSv1.2
       ZOOKEEPER_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
       ZOOKEEPER_SSL_CLIENT_AUTH: need
-      
-      ZOOKEEPER_AUTH_PROVIDER_X509: org.apache.zookeeper.server.auth.X509AuthenticationProvider
+
       ZOOKEEPER_AUTH_PROVIDER_SASL: org.apache.zookeeper.server.auth.SASLAuthenticationProvider
       KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/zookeeper_jaas.conf
     volumes:
       - scripts-security:/etc/kafka/secrets
+
+  kafka1:
+    image: ${REPOSITORY}/cp-kafka:${CONFLUENT_DOCKER_TAG}
+    hostname: kafka1
+    container_name: kafka1
+    depends_on:
+      - zookeeper
+    volumes:
+      - scripts-security-keypair:/tmp/conf
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
+    command: "bash -c 'if [ ! -f /etc/kafka/secrets/kafka.kafka1.keystore.jks ]; then echo \"ERROR: Did not find SSL certificates in /etc/kafka/secrets/ (did you remember to run ./scripts/start.sh instead of docker-compose up -d?)\" && exit 1 ; else /etc/confluent/docker/run ; fi'"
+    ports:
+      - 8091:8091
+      - 9091:9091
+      - 10091:10091
+      - 11091:11091
+    networks:
+      - kb-security-ssl_default
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2182
+      KAFKA_ZOOKEEPER_SSL_CLIENT_ENABLE: 'true'
+
+      KAFKA_ZOOKEEPER_SSL_PROTOCOL: TLSv1.3
+
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka1:9091,SASL_SSL://kafka1:10091,SSL://kafka1:11091
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:SASL_PLAINTEXT,SASL_SSL:SASL_SSL,SSL:SSL
+      # KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_LISTENER_NAME_INTERNAL_SASL_ENABLED_MECHANISMS: PLAIN
+
+      KAFKA_ZOOKEEPER_CLIENT_CNXN_SOCKET: org.apache.zookeeper.ClientCnxnSocketNetty
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka1.keystore.jks
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_TYPE: PKCS12
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka1.truststore.jks
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_TYPE: JKS
+      KAFKA_ZOOKEEPER_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka.kafka1.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: kafka1_keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: kafka1_sslkey_creds
+      KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.kafka1.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: kafka1_truststore_creds
+      KAFKA_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+      # KAFKA_SSL_CLIENT_AUTH: 'required'
+      KAFKA_SSL_CLIENT_AUTH: 'requested'
+
+      KAFKA_SUPER_USERS: User:admin;User:manager
+      KAFKA_LOG4J_LOGGERS: 'kafka.authorizer.logger=INFO'
+      KAFKA_LOG4J_ROOT_LOGLEVEL: INFO
+
+      KAFKA_BROKER_ID: 1
+      KAFKA_BROKER_RACK: "r1"
+      KAFKA_JMX_PORT: 9991
+      KAFKA_JMX_OPTS: -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=kafka1 -Dcom.sun.management.jmxremote.rmi.port=9991
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_SECURITY_EVENT_LOGGER_EXPORTER_KAFKA_TOPIC_REPLICAS: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_BALANCER_HEAL_BROKER_FAILURE_THRESHOLD_MS: 30000
+
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/broker_jaas.conf
+
+      # MDS
+      KAFKA_CONFLUENT_METADATA_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_METADATA_SERVER_AUTHENTICATION_METHOD: BEARER
+      KAFKA_CONFLUENT_METADATA_SERVER_LISTENERS: https://0.0.0.0:8091
+      KAFKA_CONFLUENT_METADATA_SERVER_ADVERTISED_LISTENERS: https://kafka1:8091
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.mds.truststore.jks
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.mds.keystore.jks
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+
+      # EmbeddedKafkaRest: MDS Client configuration
+      KAFKA_KAFKA_REST_CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
+      KAFKA_KAFKA_REST_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka1.truststore.jks
+      KAFKA_KAFKA_REST_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+
+  kafka2:
+    image: ${REPOSITORY}/cp-kafka:${CONFLUENT_DOCKER_TAG}
+    hostname: kafka2
+    container_name: kafka2
+    depends_on:
+      - zookeeper
+    volumes:
+      - scripts-security-keypair:/tmp/conf
+      - scripts-helper:/tmp/helper
+      - scripts-security:/etc/kafka/secrets
+    command: "bash -c 'if [ ! -f /etc/kafka/secrets/kafka.kafka2.keystore.jks ]; then echo \"ERROR: Did not find SSL certificates in /etc/kafka/secrets/ (did you remember to run ./scripts/start.sh instead of docker-compose up -d?)\" && exit 1 ; else /etc/confluent/docker/run ; fi'"
+    ports:
+      - 8092:8092
+      - 9092:9092
+      - 10092:10092
+      - 11092:11092
+    networks:
+      - kb-security-ssl_default
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2182
+      KAFKA_ZOOKEEPER_SSL_CLIENT_ENABLE: 'true'
+
+      KAFKA_ZOOKEEPER_SSL_PROTOCOL: TLSv1.3
+
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka2:9092,SASL_SSL://kafka2:10092,SSL://kafka2:11092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:SASL_PLAINTEXT,SASL_SSL:SASL_SSL,SSL:SSL
+      # KAFKA_SECURITY_INTER_BROKER_PROTOCOL: SSL
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_LISTENER_NAME_INTERNAL_SASL_ENABLED_MECHANISMS: PLAIN
+
+      KAFKA_ZOOKEEPER_CLIENT_CNXN_SOCKET: org.apache.zookeeper.ClientCnxnSocketNetty
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka2.keystore.jks
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_ZOOKEEPER_SSL_KEYSTORE_TYPE: PKCS12
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka2.truststore.jks
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_ZOOKEEPER_SSL_TRUSTSTORE_TYPE: JKS
+      KAFKA_ZOOKEEPER_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+
+      KAFKA_SSL_KEYSTORE_FILENAME: kafka.kafka2.keystore.jks
+      KAFKA_SSL_KEYSTORE_CREDENTIALS: kafka2_keystore_creds
+      KAFKA_SSL_KEY_CREDENTIALS: kafka2_sslkey_creds
+      KAFKA_SSL_TRUSTSTORE_FILENAME: kafka.kafka2.truststore.jks
+      KAFKA_SSL_TRUSTSTORE_CREDENTIALS: kafka2_truststore_creds
+      KAFKA_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+      # KAFKA_SSL_CLIENT_AUTH: 'required'
+      KAFKA_SSL_CLIENT_AUTH: 'requested'
+
+      KAFKA_SUPER_USERS: User:admin;User:manager
+      KAFKA_LOG4J_LOGGERS: 'kafka.authorizer.logger=INFO'
+      KAFKA_LOG4J_ROOT_LOGLEVEL: INFO
+
+      KAFKA_BROKER_ID: 2
+      KAFKA_BROKER_RACK: "r2"
+      KAFKA_JMX_PORT: 9992
+      KAFKA_JMX_OPTS: -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=kafka2 -Dcom.sun.management.jmxremote.rmi.port=9992
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_SECURITY_EVENT_LOGGER_EXPORTER_KAFKA_TOPIC_REPLICAS: 2
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 2
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_BALANCER_HEAL_BROKER_FAILURE_THRESHOLD_MS: 30000
+
+      KAFKA_DELETE_TOPIC_ENABLE: 'true'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+
+      KAFKA_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/broker_jaas.conf
+
+      # MDS
+      KAFKA_CONFLUENT_METADATA_TOPIC_REPLICATION_FACTOR: 2
+      KAFKA_CONFLUENT_METADATA_SERVER_AUTHENTICATION_METHOD: BEARER
+      KAFKA_CONFLUENT_METADATA_SERVER_LISTENERS: https://0.0.0.0:8092
+      KAFKA_CONFLUENT_METADATA_SERVER_ADVERTISED_LISTENERS: https://kafka2:8092
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.mds.truststore.jks
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.mds.keystore.jks
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+      KAFKA_CONFLUENT_METADATA_SERVER_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+
+      # EmbeddedKafkaRest: MDS Client configuration
+      KAFKA_KAFKA_REST_CONFLUENT_METADATA_BOOTSTRAP_SERVER_URLS: https://kafka1:8091,https://kafka2:8092
+      KAFKA_KAFKA_REST_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.kafka2.truststore.jks
+      KAFKA_KAFKA_REST_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+
+  schemaregistry:
+    image: ${REPOSITORY}/cp-schema-registry:${CONFLUENT_DOCKER_TAG}
+    container_name: schemaregistry
+    restart: always
+    depends_on:
+      - kafka1
+      - kafka2
+    volumes:
+      - scripts-security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+    ports:
+      - 8085:8085
+    networks:
+      - kb-security-ssl_default
+    environment:
+      CUB_CLASSPATH: '/usr/share/java/confluent-security/schema-registry/*:/usr/share/java/schema-registry/*:/usr/share/java/cp-base-new/*'
+
+      SCHEMA_REGISTRY_HOST_NAME: schemaregistry
+
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: SSL://kafka1:11091,SSL://kafka2:11092
+      SCHEMA_REGISTRY_LISTENERS: https://0.0.0.0:8085
+      SCHEMA_REGISTRY_KAFKASTORE_SECURITY_PROTOCOL: SSL
+
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.schemaregistry.truststore.jks
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.schemaregistry.keystore.jks
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      SCHEMA_REGISTRY_KAFKASTORE_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+
+      SCHEMA_REGISTRY_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.schemaregistry.truststore.jks
+      SCHEMA_REGISTRY_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      SCHEMA_REGISTRY_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.schemaregistry.keystore.jks
+      SCHEMA_REGISTRY_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      SCHEMA_REGISTRY_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+      SCHEMA_REGISTRY_SSL_CLIENT_AUTHENTICATION: 'NONE'
+
+      SCHEMA_REGISTRY_SCHEMA_REGISTRY_INTER_INSTANCE_PROTOCOL: "https"
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC: _schemas
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 2
+      SCHEMA_REGISTRY_SSL_CIPHER_SUITES: ${SSL_CIPHER_SUITES}
+
+      SCHEMA_REGISTRY_AUTHENTICATION_METHOD: BASIC
+      SCHEMA_REGISTRY_AUTHENTICATION_REALM: SchemaRegistryProps
+      SCHEMA_REGISTRY_AUTHENTICATION_ROLES: admin
+      SCHEMA_REGISTRY_DEBUG: 'true'
+
+      SCHEMA_REGISTRY_OPTS: -Djava.security.auth.login.config=/etc/kafka/secrets/schemaregistry_jaas.conf
+
+  connect:
+    image: localbuild/connect:${CONFLUENT_DOCKER_TAG}-${CONNECTOR_VERSION}
+    container_name: connect
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SSL_PASSWORD: ${SSL_PASSWORD}
+    depends_on:
+      - kafka1
+      - kafka2
+      - schemaregistry
+    volumes:
+      - scripts-security:/etc/kafka/secrets
+      - scripts-security-keypair:/tmp/conf
+    ports:
+      - 8083:8083
+    networks:
+      - kb-security-ssl_default
+    environment:
+      CUB_CLASSPATH: '/usr/share/java/confluent-security/connect/*:/usr/share/java/kafka/*:/usr/share/java/cp-base-new/*'
+
+      CONNECT_BOOTSTRAP_SERVERS: kafka1:11091,kafka2:11092
+      CONNECT_LISTENERS: https://0.0.0.0:8083
+      CONNECT_GROUP_ID: "connect-cluster"
+      CONNECT_PRODUCER_CLIENT_ID: "connect-worker-producer"
+      CONNECT_PRODUCER_ENABLE_IDEMPOTENCE: 'true'
+
+      CONNECT_CONFIG_STORAGE_TOPIC: connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: connect-statuses
+
+      CONNECT_REPLICATION_FACTOR: 2
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 2
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 2
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 2
+
+      CONNECT_KEY_CONVERTER: "org.apache.kafka.connect.storage.StringConverter"
+      CONNECT_VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      CONNECT_LOG4J_ROOT_LOGLEVEL: INFO
+      CONNECT_LOG4J_LOGGERS: org.reflections=ERROR
+      CLASSPATH: "/usr/share/java/kafka-connect-replicator/replicator-rest-extension-${CONNECTOR_VERSION}.jar:/usr/share/java/monitoring-interceptors/*"
+
+      # Connect Worker
+      CONNECT_SECURITY_PROTOCOL: SSL
+      CONNECT_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.truststore.jks
+      CONNECT_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.keystore.jks
+      CONNECT_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+
+      # Connect Producer
+      CONNECT_PRODUCER_SECURITY_PROTOCOL: SSL
+      CONNECT_PRODUCER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.truststore.jks
+      CONNECT_PRODUCER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_PRODUCER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.keystore.jks
+      CONNECT_PRODUCER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_PRODUCER_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+
+      # Connect Consumer
+      CONNECT_CONSUMER_SECURITY_PROTOCOL: SSL
+      CONNECT_CONSUMER_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.truststore.jks
+      CONNECT_CONSUMER_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_CONSUMER_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.keystore.jks
+      CONNECT_CONSUMER_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_CONSUMER_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+
+      # Allow overriding configs on the connector level
+      CONNECT_CONNECTOR_CLIENT_CONFIG_OVERRIDE_POLICY: 'All'
+
+      # Default admin config
+      CONNECT_ADMIN_SECURITY_PROTOCOL: SSL
+      CONNECT_ADMIN_SSL_TRUSTSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.truststore.jks
+      CONNECT_ADMIN_SSL_TRUSTSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_ADMIN_SSL_KEYSTORE_LOCATION: /etc/kafka/secrets/kafka.connect.keystore.jks
+      CONNECT_ADMIN_SSL_KEYSTORE_PASSWORD: ${SSL_PASSWORD}
+      CONNECT_ADMIN_SSL_KEY_PASSWORD: ${SSL_PASSWORD}
+
+      # Reduce Connect memory utilization
+      KAFKA_JVM_PERFORMANCE_OPTS: -server -XX:+UseG1GC -XX:GCTimeRatio=1
+                  -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=20
+                  -XX:MaxGCPauseMillis=10000 -XX:InitiatingHeapOccupancyPercent=35 -XX:+ExplicitGCInvokesConcurrent
+                  -XX:MaxInlineLevel=15 -Djava.awt.headless=true
 
 volumes:
   scripts-security:
@@ -50,3 +391,8 @@ volumes:
       o: bind
       type: none
       device: ./scripts/security/keypair
+
+networks:
+  kb-security-ssl_default:
+    driver: bridge
+    name: kb-security-ssl_default

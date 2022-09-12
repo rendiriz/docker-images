@@ -23,7 +23,7 @@ openssl req -new -x509 -keyout ${CA}.key -out ${CA}.crt -days 3650 -subj '/CN=wj
 #
 # This is necessary as browsers never prompt to trust certificates for this kind of wss:// connection, see https://stackoverflow.com/a/23036270/452210 .
 #
-users=(zookeeper kafka1 kafka2 client)
+users=(mds zookeeper kafka1 kafka2 schemaregistry connect client ksqlDBServer ksqlDBUser restproxy)
 echo "Creating certificates"
 printf '%s\0' "${users[@]}" | xargs -0 -I{} -n1 -P15 sh -c './certs-create-per-user.sh "$1" > "certs-create-$1.log" 2>&1 && echo "Created certificates for $1"' -- {}
 echo "Creating certificates completed"
